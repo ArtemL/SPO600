@@ -1,0 +1,62 @@
+*** a/src/include/storage/s_lock.h
+--- b/src/include/storage/s_lock.h
+***************
+*** 30,38 ****
+   *
+   *	Note to implementors: there are default implementations for all these
+   *	macros at the bottom of the file.  Check if your platform can use
+!  *	these or needs to override them.
+   *
+!  *  Usually, S_LOCK() is implemented in terms of even lower-level macros
+   *	TAS() and TAS_SPIN():
+   *
+   *	int TAS(slock_t *lock)
+--- 30,77 ----
+   *
+   *	Note to implementors: there are default implementations for all these
+   *	macros at the bottom of the file.  Check if your platform can use
+!  *	these or needs to override them. Currently, the macros were implemented
+!  *	on the following platforms:
+   *
+!  *	void S_INIT_LOCK(slock_t *lock)
+!  *	Non-gcc inline assembly:
+!  *	HP PA-RISC, GCC and HP compilers.
+!  *
+!  *	int S_LOCK(slock_t *lock)
+!  *	gcc based:
+!  *	32-bit i386 (TAS only);
+!  *	AMD Opteron, Intel EM64T;			ARM (TAS only);
+!  *	ARM64 (TAS only);				Intel Itanium, gcc or Intel's compiler;
+!  *	Linux Motorola 68k (TAS only);			non-Linux Motorola 68k;
+!  *	non-SGI MIPS (TAS only);			PowerPC;
+!  *	Renesas' M32R (TAS only);			Renesas' SuperH (TAS only);
+!  *	S/390 and S/390x Linux (32- and 64-bit zSeries);
+!  *	Sparc (TAS only);				VAXen (TAS only).
+!  *
+!  *	Non-gcc inline assembly:
+!  *	AIX (POWER) (TAS only);				HP-UX on Itanium;
+!  *	HP PA-RISC, GCC and HP compilers (TAS only);	Sunstudio's Sparc and x86 (TAS only);
+!  *	Unixware compiler (TAS only);			WIN32 (TAS only) and WIN64 compilers.
+!  *
+!  *	void S_UNLOCK(slock_t *lock)
+!  *	gcc based:
+!  *	ARM (with gcc atomics);				ARM64 (with gcc atomics);
+!  *	non-SGI MIPS;					PowerPC;
+!  *	WIN32 and WIN64 compilers.
+!  *
+!  *	Non-gcc inline assembly:
+!  *	AIX (POWER);					HP-UX on Itanium;
+!  *	HP PA-RISC, GCC and HP compilers.
+!  *
+!  *	bool S_LOCK_FREE(slock_t *lock)
+!  *	Non-gcc inline assembly:
+!  *	HP PA-RISC, GCC and HP compilers.
+!  *
+!  *	void SPIN_DELAY(void)
+!  *	gcc based:
+!  *	32-bit i386;					AMD Opteron, Intel EM64T.
+!  *
+!  *	Usually, S_LOCK() is implemented in terms of even lower-level macros
+   *	TAS() and TAS_SPIN():
+   *
+   *	int TAS(slock_t *lock)
