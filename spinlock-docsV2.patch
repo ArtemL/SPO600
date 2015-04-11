@@ -1,0 +1,457 @@
+*** a/src/include/storage/s_lock.h
+--- b/src/include/storage/s_lock.h
+***************
+*** 30,38 ****
+   *
+   *	Note to implementors: there are default implementations for all these
+   *	macros at the bottom of the file.  Check if your platform can use
+!  *	these or needs to override them.
+   *
+!  *  Usually, S_LOCK() is implemented in terms of even lower-level macros
+   *	TAS() and TAS_SPIN():
+   *
+   *	int TAS(slock_t *lock)
+--- 30,38 ----
+   *
+   *	Note to implementors: there are default implementations for all these
+   *	macros at the bottom of the file.  Check if your platform can use
+!  *	these or needs to override them. 
+   *
+!  *	Usually, S_LOCK() is implemented in terms of even lower-level macros
+   *	TAS() and TAS_SPIN():
+   *
+   *	int TAS(slock_t *lock)
+***************
+*** 93,98 ****
+--- 93,131 ----
+   *
+   *-------------------------------------------------------------------------
+   */
++ 
++ /*---------------------------------------------------------------------------
++  * File layout:
++  *
++  * -- Spinlocks requested
++  *		|-- Gcc 
++  *		|	|-- Platform: 32-bit i386
++  *		|	|-- Platform: AMD Opteron Intel EM64T
++  *		|	|-- Platform: Intel Itanium
++  *		|	|-- Platform: ARM and ARM64
++  *		|	|-- Platform: S/390 and S/390x Linux (32- and 64-bit zSeries)
++  *		|	|-- Platform: Sparc
++  *		|	|-- Platform: PowerPC
++  *		|	|-- Platform: Linux Motorola 68k
++  *		|	|-- Platform: VAXen
++  *		|	|-- Platform: non-SGI MIPS
++  *		|	|-- Platform: Renesas' M32R
++  *		|	|-- Platform: Renesas' SuperH
++  *		|	|-- Platform: non-Linux Motorola 68k
++  *		|	L-- Default implementation of S_UNLOCK
++  *		|-- Non-gcc 
++  *		|	|-- Compilers: Unixware
++  *		|	|-- Compilers: HP PA-RISC, GCC and HP
++  *		|	|-- Compilers: HP-UX on Itanium
++  *		|	|-- Compilers: AIX (POWER)
++  *		|	|-- Platform: Sunstudio's Sparc and x86
++  *		|	L-- Compilers: WIN32 and WIN64
++  *		L-- None of the above (Blow up)
++  * -- Spinlocks not requested : Fake spinlock implementation using semaphores
++  * -- Default definitions
++  * --------------------------------------------------------------------------
++  */
++ 
+  #ifndef S_LOCK_H
+  #define S_LOCK_H
+  
+***************
+*** 128,134 ****
+   */
+  
+  
+! #ifdef __i386__		/* 32-bit i386 */
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+--- 161,171 ----
+   */
+  
+  
+! /* 
+!  * 32-bit i386 
+!  * Currently implemented: S_LOCK(TAS only), SPIN_DELAY. 
+!  */
+! #ifdef __i386__		
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+***************
+*** 198,204 **** spin_delay(void)
+  #endif	 /* __i386__ */
+  
+  
+! #ifdef __x86_64__		/* AMD Opteron, Intel EM64T */
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+--- 235,245 ----
+  #endif	 /* __i386__ */
+  
+  
+! /* 
+!  * AMD Opteron Intel EM64T
+!  * Currently implemented: S_LOCK, SPIN_DELAY.
+!  */
+! #ifdef __x86_64__		
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+***************
+*** 262,267 **** spin_delay(void)
+--- 303,310 ----
+   * any explicit statement on that in the gcc manual.  In Intel's compiler,
+   * the -m[no-]serialize-volatile option controls that, and testing shows that
+   * it is enabled by default.
++  *
++  * Currently implemented: S_LOCK.
+   */
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 302,312 **** tas(volatile slock_t *lock)
+--- 345,360 ----
+  #endif /* __INTEL_COMPILER */
+  #endif	 /* __ia64__ || __ia64 */
+  
++ 
+  /*
++  * ARM and ARM64
++  *
+   * On ARM and ARM64, we use __sync_lock_test_and_set(int *, int) if available.
+   *
+   * We use the int-width variant of the builtin because it works on more chips
+   * than other widths.
++  *
++  * Currently implemented: S_LOCK(TAS only), S_UNLOCK.
+   */
+  #if defined(__arm__) || defined(__arm) || defined(__aarch64__) || defined(__aarch64)
+  #ifdef HAVE_GCC__SYNC_INT32_TAS
+***************
+*** 328,334 **** tas(volatile slock_t *lock)
+  #endif	 /* __arm__ || __arm || __aarch64__ || __aarch64 */
+  
+  
+! /* S/390 and S/390x Linux (32- and 64-bit zSeries) */
+  #if defined(__s390__) || defined(__s390x__)
+  #define HAS_TEST_AND_SET
+  
+--- 376,385 ----
+  #endif	 /* __arm__ || __arm || __aarch64__ || __aarch64 */
+  
+  
+! /* 
+!  * S/390 and S/390x Linux (32- and 64-bit zSeries)  
+!  * Currently implemented: S_LOCK(TAS only). 
+!  */
+  #if defined(__s390__) || defined(__s390x__)
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 352,363 **** tas(volatile slock_t *lock)
+  #endif	 /* __s390__ || __s390x__ */
+  
+  
+! #if defined(__sparc__)		/* Sparc */
+  /*
+   * Solaris has always run sparc processors in TSO (total store) mode, but
+   * linux didn't use to and the *BSDs still don't. So, be careful about
+   * acquire/release semantics. The CPU will treat superflous membars as NOPs,
+   * so it's just code space.
+   */
+  #define HAS_TEST_AND_SET
+  
+--- 403,418 ----
+  #endif	 /* __s390__ || __s390x__ */
+  
+  
+! #if defined(__sparc__)
+  /*
++  * Sparc
++  *
+   * Solaris has always run sparc processors in TSO (total store) mode, but
+   * linux didn't use to and the *BSDs still don't. So, be careful about
+   * acquire/release semantics. The CPU will treat superflous membars as NOPs,
+   * so it's just code space.
++  *
++  * Currently implemented: S_LOCK(TAS only), S_UNLOCK(except for sparcv7).
+   */
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 428,434 **** do \
+  #endif	 /* __sparc__ */
+  
+  
+! /* PowerPC */
+  #if defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
+  #define HAS_TEST_AND_SET
+  
+--- 483,492 ----
+  #endif	 /* __sparc__ */
+  
+  
+! /* 
+!  * PowerPC 
+!  * Currently implemented: S_LOCK, S_UNLOCK. 
+!  */
+  #if defined(__ppc__) || defined(__powerpc__) || defined(__ppc64__) || defined(__powerpc64__)
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 478,483 **** tas(volatile slock_t *lock)
+--- 536,542 ----
+  	return _res;
+  }
+  
++ 
+  /*
+   * PowerPC S_UNLOCK is almost standard but requires a "sync" instruction.
+   * On newer machines, we can use lwsync instead for better performance.
+***************
+*** 501,507 **** do \
+  #endif /* powerpc */
+  
+  
+! /* Linux Motorola 68k */
+  #if (defined(__mc68000__) || defined(__m68k__)) && defined(__linux__)
+  #define HAS_TEST_AND_SET
+  
+--- 560,569 ----
+  #endif /* powerpc */
+  
+  
+! /* 
+!  * Linux Motorola 68k 
+!  * Currently implemented: S_LOCK(TAS only). 
+!  */
+  #if (defined(__mc68000__) || defined(__m68k__)) && defined(__linux__)
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 530,535 **** tas(volatile slock_t *lock)
+--- 592,598 ----
+  /*
+   * VAXen -- even multiprocessor ones
+   * (thanks to Tom Ivar Helbekkmo)
++  * Currently implemented: S_LOCK(TAS only). 
+   */
+  #if defined(__vax__)
+  #define HAS_TEST_AND_SET
+***************
+*** 557,565 **** tas(volatile slock_t *lock)
+  #endif	 /* __vax__ */
+  
+  
+! #if defined(__mips__) && !defined(__sgi)	/* non-SGI MIPS */
+! /* Note: on SGI we use the OS' mutex ABI, see below */
+! /* Note: R10000 processors require a separate SYNC */
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned int slock_t;
+--- 620,632 ----
+  #endif	 /* __vax__ */
+  
+  
+! #if defined(__mips__) && !defined(__sgi)	
+! /* 
+!  * non-SGI MIPS 
+!  * Note: on SGI we use the OS' mutex ABI, see below.
+!  * Note: R10000 processors require a separate SYNC.
+!  * Currently implemented: S_LOCK(TAS only), S_UNLOCK.
+!  */
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned int slock_t;
+***************
+*** 611,617 **** do \
+  #endif /* __mips__ && !__sgi */
+  
+  
+! #if defined(__m32r__) && defined(HAVE_SYS_TAS_H)	/* Renesas' M32R */
+  #define HAS_TEST_AND_SET
+  
+  #include <sys/tas.h>
+--- 678,688 ----
+  #endif /* __mips__ && !__sgi */
+  
+  
+! /* 
+!  * Renesas' M32R 
+!  * Currently implemented: S_LOCK(TAS only).
+!  */
+! #if defined(__m32r__) && defined(HAVE_SYS_TAS_H)
+  #define HAS_TEST_AND_SET
+  
+  #include <sys/tas.h>
+***************
+*** 623,629 **** typedef int slock_t;
+  #endif /* __m32r__ */
+  
+  
+! #if defined(__sh__)				/* Renesas' SuperH */
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+--- 694,704 ----
+  #endif /* __m32r__ */
+  
+  
+! /*
+!  * Renesas' SuperH
+!  * Currently implemented: S_LOCK(TAS only).
+!  */
+! #if defined(__sh__)
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+***************
+*** 656,662 **** tas(volatile slock_t *lock)
+  /* These live in s_lock.c, but only for gcc */
+  
+  
+! #if defined(__m68k__) && !defined(__linux__)	/* non-Linux Motorola 68k */
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+--- 731,741 ----
+  /* These live in s_lock.c, but only for gcc */
+  
+  
+! /*
+!  * non-Linux Motorola 68k
+!  * Currently implemented: S_LOCK(TAS only, the code is in s_lock.c).
+!  */
+! #if defined(__m68k__) && !defined(__linux__)
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+***************
+*** 693,699 **** typedef unsigned char slock_t;
+  #if !defined(HAS_TEST_AND_SET)	/* We didn't trigger above, let's try here */
+  
+  
+! #if defined(USE_UNIVEL_CC)		/* Unixware compiler */
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+--- 772,782 ----
+  #if !defined(HAS_TEST_AND_SET)	/* We didn't trigger above, let's try here */
+  
+  
+! /*
+!  * Unixware compiler
+!  * Currently implemented: S_LOCK(TAS only).
+!  */
+! #if defined(USE_UNIVEL_CC)
+  #define HAS_TEST_AND_SET
+  
+  typedef unsigned char slock_t;
+***************
+*** 716,723 **** tas(volatile slock_t *s_lock)
+  #endif	 /* defined(USE_UNIVEL_CC) */
+  
+  
+! #if defined(__hppa) || defined(__hppa__)	/* HP PA-RISC, GCC and HP compilers */
+  /*
+   * HP's PA-RISC
+   *
+   * See src/backend/port/hpux/tas.c.template for details about LDCWX.  Because
+--- 799,808 ----
+  #endif	 /* defined(USE_UNIVEL_CC) */
+  
+  
+! #if defined(__hppa) || defined(__hppa__)
+  /*
++  * HP PA-RISC, GCC and HP compilers
++  *
+   * HP's PA-RISC
+   *
+   * See src/backend/port/hpux/tas.c.template for details about LDCWX.  Because
+***************
+*** 726,731 **** tas(volatile slock_t *s_lock)
+--- 811,818 ----
+   * the other three words just sit at -1.
+   *
+   * When using gcc, we can inline the required assembly code.
++  *
++  * Currently implemented: S_LOCK(TAS only), S_UNLOCK, S_INIT_LOCK, S_LOCK_FREE.
+   */
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 796,801 **** tas(volatile slock_t *lock)
+--- 883,890 ----
+   * PA-RISC, by Tor Ekqvist and David Graves, for more information.  As of
+   * this writing, version 1.0 of the manual is available at:
+   * http://h21007.www2.hp.com/portal/download/files/unprot/itanium/spinlocks.pdf
++  *
++  * Currently implemented: S_LOCK, S_UNLOCK.
+   */
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 810,818 **** typedef unsigned int slock_t;
+  
+  #endif	/* HPUX on IA64, non gcc */
+  
+! #if defined(_AIX)	/* AIX */
+  /*
+   * AIX (POWER)
+   */
+  #define HAS_TEST_AND_SET
+  
+--- 899,909 ----
+  
+  #endif	/* HPUX on IA64, non gcc */
+  
+! 
+! #if defined(_AIX)
+  /*
+   * AIX (POWER)
++  * Currently implemented: S_LOCK(TAS only), S_UNLOCK.
+   */
+  #define HAS_TEST_AND_SET
+  
+***************
+*** 825,831 **** typedef int slock_t;
+  #endif	 /* _AIX */
+  
+  
+! /* These are in sunstudio_(sparc|x86).s */
+  
+  #if defined(__SUNPRO_C) && (defined(__i386) || defined(__x86_64__) || defined(__sparc__) || defined(__sparc))
+  #define HAS_TEST_AND_SET
+--- 916,926 ----
+  #endif	 /* _AIX */
+  
+  
+! /* 
+!  * Sunstudio's Sparc and x86
+!  * Note: These are in sunstudio_(sparc|x86).s 
+!  * Currently implemented: S_LOCK(TAS only).
+!  */
+  
+  #if defined(__SUNPRO_C) && (defined(__i386) || defined(__x86_64__) || defined(__sparc__) || defined(__sparc))
+  #define HAS_TEST_AND_SET
+***************
+*** 843,848 **** extern slock_t pg_atomic_cas(volatile slock_t *lock, slock_t with,
+--- 938,947 ----
+  #endif
+  
+  
++ /*
++  * WIN32 and WIN64 compilers
++  * Currently implemented: S_LOCK(TAS only), SPIN_DELAY.
++  */
+  #ifdef WIN32_ONLY_COMPILER
+  typedef LONG slock_t;
+  
