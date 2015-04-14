@@ -2,20 +2,16 @@
 --- b/src/include/storage/s_lock.h
 ***************
 *** 30,38 ****
-   *
-   *	Note to implementors: there are default implementations for all these
    *	macros at the bottom of the file.  Check if your platform can use
-!  *	these or needs to override them.
+   *	these or needs to override them.
    *
 !  *  Usually, S_LOCK() is implemented in terms of even lower-level macros
    *	TAS() and TAS_SPIN():
    *
    *	int TAS(slock_t *lock)
 --- 30,38 ----
-   *
-   *	Note to implementors: there are default implementations for all these
    *	macros at the bottom of the file.  Check if your platform can use
-!  *	these or needs to override them. 
+   *	these or needs to override them.
    *
 !  *	Usually, S_LOCK() is implemented in terms of even lower-level macros
    *	TAS() and TAS_SPIN():
